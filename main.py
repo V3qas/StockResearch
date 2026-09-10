@@ -6,6 +6,7 @@ import pandas as pd
 
 from src.backtest import run_walk_forward_backtest, summarize_backtest
 from src.config import (
+    BENCHMARK,
     FORECAST_DAYS,
     PREDICTIONS_DIR,
     PROCESSED_DATA_DIR,
@@ -14,7 +15,7 @@ from src.config import (
 )
 from src.data_loader import get_stock, ticker_to_filename
 from src.features import add_features
-from src.targets import add_targets, build_monthly_samples
+from src.targets import add_benchmark_targets, add_targets, build_monthly_samples
 
 
 def parse_args() -> argparse.Namespace:
@@ -68,10 +69,21 @@ def print_sample_table(samples: pd.DataFrame, limit: int) -> None:
         lambda value: f"{value:,.2f}"
     )
     view["return_12m"] = view["future_return_12m"].map(format_percent)
+    view["benchmark_12m"] = view["benchmark_return_12m"].map(format_percent)
+    view["alpha_12m"] = view["alpha_12m"].map(format_percent)
 
     print(
         view[
-            ["as_of", "price", "target_date", "price_plus_12m", "return_12m"]
+            [
+                "as_of",
+                "ticker",
+                "price",
+                "target_date",
+                "price_plus_12m",
+                "return_12m",
+                "benchmark_12m",
+                "alpha_12m",
+            ]
         ].to_string(index=False)
     )
 
@@ -109,8 +121,9 @@ def process_ticker(
     run_backtest: bool,
     min_train_years: int,
     min_train_samples: int,
+    benchmark_prices: pd.DataFrame,
 ) -> None:
-    print(f"\nDownloading {ticker}...")
+    print(f"\nLoading {ticker}...")
     prices = get_stock(
         ticker=ticker,
         start_date=start_date,
@@ -125,7 +138,8 @@ def process_ticker(
 
     with_features = add_features(prices)
     with_targets = add_targets(with_features, forecast_days=forecast_days)
-    samples = build_monthly_samples(with_targets)
+    with_alpha = add_benchmark_targets(with_targets, benchmark_prices)
+    samples = build_monthly_samples(with_alpha, ticker=ticker)
 
     PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
     output_path = PROCESSED_DATA_DIR / f"{ticker_to_filename(ticker)}_samples.parquet"
@@ -161,6 +175,19 @@ def main() -> None:
     args = parse_args()
     tickers = args.tickers or TICKERS
 
+    print(f"Loading benchmark {BENCHMARK}...")
+    benchmark_prices = get_stock(
+        ticker=BENCHMARK,
+        start_date=args.start_date,
+        force_download=args.force_download,
+    )
+    print(
+        "Benchmark available: "
+        f"{benchmark_prices.index.min().date()} -> "
+        f"{benchmark_prices.index.max().date()} "
+        f"({len(benchmark_prices):,} rows)"
+    )
+
     for ticker in tickers:
         process_ticker(
             ticker=ticker,
@@ -171,6 +198,7 @@ def main() -> None:
             run_backtest=args.backtest,
             min_train_years=args.min_train_years,
             min_train_samples=args.min_train_samples,
+            benchmark_prices=benchmark_prices,
         )
 
 

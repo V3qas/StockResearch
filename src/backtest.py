@@ -17,13 +17,13 @@ from src.metrics import (
     recall_score,
     roc_auc_score,
 )
+from src.targets import ALPHA_TARGET_COLUMN, OUTPERFORM_TARGET_COLUMN, TARGET_DATE_COLUMN
 
 
-RETURN_TARGET_COLUMN = "future_return_12m"
-PROBABILITY_TARGET_COLUMN = "future_positive_12m"
-TARGET_DATE_COLUMN = "future_target_date"
-PREDICTED_RETURN_COLUMN = "predicted_return_12m"
-PREDICTED_PROBABILITY_COLUMN = "predicted_probability_positive_12m"
+RETURN_TARGET_COLUMN = ALPHA_TARGET_COLUMN
+PROBABILITY_TARGET_COLUMN = OUTPERFORM_TARGET_COLUMN
+PREDICTED_RETURN_COLUMN = "predicted_alpha_12m"
+PREDICTED_PROBABILITY_COLUMN = "predicted_probability_outperform_12m"
 TEST_YEAR_COLUMN = "test_year"
 
 ModelFactory = Callable[[], object]

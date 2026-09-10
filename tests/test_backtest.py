@@ -58,8 +58,8 @@ def test_backtest_uses_only_labels_known_at_test_year_start() -> None:
         {
             "feature": values,
             "future_target_date": dates + pd.DateOffset(years=1),
-            "future_return_12m": future_return,
-            "future_positive_12m": (future_return > 0).astype(int),
+            "alpha_12m": future_return,
+            "future_outperform_12m": (future_return > 0).astype(int),
         },
         index=dates,
     )
@@ -82,10 +82,10 @@ def test_backtest_uses_only_labels_known_at_test_year_start() -> None:
 def test_summarize_backtest_returns_regression_and_classification_metrics() -> None:
     predictions = pd.DataFrame(
         {
-            "future_return_12m": [0.10, -0.05, 0.20, -0.10],
-            "predicted_return_12m": [0.08, -0.01, 0.18, 0.02],
-            "future_positive_12m": [1, 0, 1, 0],
-            "predicted_probability_positive_12m": [0.80, 0.40, 0.70, 0.60],
+            "alpha_12m": [0.10, -0.05, 0.20, -0.10],
+            "predicted_alpha_12m": [0.08, -0.01, 0.18, 0.02],
+            "future_outperform_12m": [1, 0, 1, 0],
+            "predicted_probability_outperform_12m": [0.80, 0.40, 0.70, 0.60],
         }
     )
 
