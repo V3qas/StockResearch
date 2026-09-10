@@ -32,7 +32,7 @@ REQUIRED_COMBINED_COLUMNS = [
 
 
 def ticker_samples_path(ticker: str) -> Path:
-    return PROCESSED_DATA_DIR / f"{ticker_to_filename(ticker)}_samples.parquet"
+    return PROCESSED_DATA_DIR / f"stock_{ticker_to_filename(ticker)}_samples.parquet"
 
 
 def all_samples_path() -> Path:
@@ -84,7 +84,8 @@ def build_ticker_samples(
 def save_ticker_samples(samples: pd.DataFrame, ticker: str, output_dir: Path | None = None) -> Path:
     directory = PROCESSED_DATA_DIR if output_dir is None else output_dir
     directory.mkdir(parents=True, exist_ok=True)
-    output_path = directory / f"{ticker_to_filename(ticker)}_samples.parquet"
+    # ALL is a real ticker; ALL_samples collides with all_samples on Windows.
+    output_path = directory / f"stock_{ticker_to_filename(ticker)}_samples.parquet"
     samples.to_parquet(output_path)
     return output_path
 
