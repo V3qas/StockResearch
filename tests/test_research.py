@@ -22,6 +22,26 @@ def sample_frame():
     return pd.DataFrame(rows).set_index("as_of")
 
 
+@pytest.mark.parametrize(
+    "tickers, message",
+    [
+        (["TSLA", "tsla"], "case-insensitive"),
+        (["BRK.B", "BRK/B"], "distinct cache filenames"),
+    ],
+)
+def test_ticker_validation_rejects_cross_platform_filename_collisions(tickers, message):
+    import main
+
+    with pytest.raises(ValueError, match=message):
+        main.validate_tickers(tickers)
+
+
+def test_ticker_validation_strips_surrounding_whitespace():
+    import main
+
+    assert main.validate_tickers([" TSLA ", "BABA"]) == ["TSLA", "BABA"]
+
+
 def test_models_share_folds_and_baselines_use_training_history_only():
     samples = sample_frame()
     specs = [
@@ -104,6 +124,8 @@ def test_cli_writes_comparable_artifacts_for_one_explicit_snapshot(monkeypatch, 
     assert manifest["parameters"]["end_date_exclusive"] == "2018-01-01"
     assert manifest["parameters"]["benchmark"] == "SPY"
     assert manifest["parameters"]["reference_calendar"] == "XNYS"
+    assert manifest["parameters"]["cross_sectional_backtest_requested"] is False
+    assert manifest["parameters"]["model_comparison_requested"] is True
     assert pd.read_parquet(old_output).stale.eq(1).all()
     assert pd.read_parquet(output_dir / old_output.name).empty == (min_train_years == 50)
     assert (run_dir / "raw/benchmark.parquet").exists()

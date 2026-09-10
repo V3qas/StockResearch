@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 
 import pandas as pd
 
@@ -81,6 +82,19 @@ def parse_args() -> argparse.Namespace:
 
 def format_percent(value: float) -> str:
     return "n/a" if pd.isna(value) else f"{value:+.2%}"
+
+
+def validate_tickers(tickers: Sequence[str]) -> list[str]:
+    """Reject logical duplicates and filenames that collide on common filesystems."""
+    normalized = [ticker.strip() for ticker in tickers]
+    if any(not ticker for ticker in normalized):
+        raise ValueError("Ticker symbols must not be empty.")
+    if len({ticker.casefold() for ticker in normalized}) != len(normalized):
+        raise ValueError("Provide unique tickers; ticker matching is case-insensitive.")
+    filenames = [ticker_to_filename(ticker).casefold() for ticker in normalized]
+    if len(set(filenames)) != len(filenames):
+        raise ValueError("Provide tickers with distinct cache filenames.")
+    return normalized
 
 
 def print_sample_table(samples: pd.DataFrame, limit: int) -> None:
@@ -216,9 +230,7 @@ def process_ticker(
 
 def main() -> None:
     args = parse_args()
-    tickers = args.tickers or TICKERS
-    if len({ticker_to_filename(ticker) for ticker in tickers}) != len(tickers):
-        raise ValueError("Provide unique tickers with distinct cache filenames.")
+    tickers = validate_tickers(args.tickers or TICKERS)
     comparison_requested = bool(args.cross_sectional_backtest or args.compare_models)
     specs = default_model_specs() if comparison_requested else []
     if specs and not args.compare_models:
@@ -235,6 +247,8 @@ def main() -> None:
         "min_train_samples": args.min_train_samples,
         "min_ranking_tickers": args.min_ranking_tickers,
         "comparison_requested": comparison_requested,
+        "cross_sectional_backtest_requested": bool(args.cross_sectional_backtest),
+        "model_comparison_requested": bool(args.compare_models),
         "models": [spec.name for spec in specs],
         "per_ticker_backtest_requested": bool(args.backtest),
         "force_download": bool(args.force_download),

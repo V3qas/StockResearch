@@ -12,6 +12,24 @@ def read_json(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def test_installed_versions_normalizes_and_sorts_distribution_names(monkeypatch):
+    class Distribution:
+        def __init__(self, name, package_version):
+            self.metadata = {"Name": name}
+            self.version = package_version
+
+    monkeypatch.setattr(
+        experiments,
+        "distributions",
+        lambda: [Distribution("SciPy", "1.2.3"), Distribution("example_pkg", "4.5.6")],
+    )
+
+    assert experiments.installed_versions() == {
+        "example-pkg": "4.5.6",
+        "scipy": "1.2.3",
+    }
+
+
 def test_successful_run_freezes_inputs_code_and_output_hashes(tmp_path):
     cache = tmp_path / "mutable_cache.parquet"
     original = pd.DataFrame({"Close": [100.0, 110.0]})
@@ -26,6 +44,7 @@ def test_successful_run_freezes_inputs_code_and_output_hashes(tmp_path):
     assert read_json(run.runs_dir / "latest.json")["run_id"] == run.run_id
     manifest = read_json(run.path / "manifest.json")
     assert manifest["status"] == "complete"
+    assert manifest["schema_version"] == 4
     assert "exchange-calendars" in manifest["versions"]
     assert "source/src/train.py" in manifest["artifacts_sha256"]
     for name, digest in manifest["artifacts_sha256"].items():

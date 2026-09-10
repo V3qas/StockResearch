@@ -4,9 +4,10 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 from datetime import datetime, timezone
-from importlib.metadata import version
+from importlib.metadata import distributions
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,6 +16,17 @@ from src.config import PROJECT_ROOT
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def installed_versions() -> dict[str, str]:
+    """Return a deterministic snapshot of the complete Python environment."""
+    versions = []
+    for distribution in distributions():
+        name = distribution.metadata.get("Name")
+        if name:
+            normalized_name = re.sub(r"[-_.]+", "-", name).lower()
+            versions.append((normalized_name, distribution.version))
+    return dict(sorted(versions))
 
 
 def _atomic_json(path: Path, payload: dict) -> None:
@@ -50,15 +62,13 @@ class ExperimentRun:
         self.predictions = self.path / "predictions"
         self.source_root = source_root
         self.manifest = {
-            "schema_version": 3,
+            "schema_version": 4,
             "run_id": self.run_id,
             "status": "running",
             "started_at": _utc_now(),
             "parameters": metadata,
             "python_version": platform.python_version(),
-            "versions": {name: version(name) for name in (
-                "pandas", "numpy", "yfinance", "scikit-learn", "xgboost", "pyarrow", "exchange-calendars",
-            )},
+            "versions": installed_versions(),
         }
 
     def __enter__(self) -> ExperimentRun:
