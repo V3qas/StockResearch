@@ -23,10 +23,10 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     featured = df.copy()
     close = pd.to_numeric(featured["Close"], errors="coerce")
 
-    featured["return_5d"] = close.pct_change(5)
-    featured["return_20d"] = close.pct_change(20)
-    featured["return_60d"] = close.pct_change(60)
-    featured["return_120d"] = close.pct_change(120)
+    featured["return_5d"] = close.pct_change(5, fill_method=None)
+    featured["return_20d"] = close.pct_change(20, fill_method=None)
+    featured["return_60d"] = close.pct_change(60, fill_method=None)
+    featured["return_120d"] = close.pct_change(120, fill_method=None)
 
     featured["sma_20"] = close.rolling(20).mean()
     featured["sma_50"] = close.rolling(50).mean()
@@ -36,7 +36,7 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     featured["distance_sma_50"] = close / featured["sma_50"] - 1
     featured["distance_sma_200"] = close / featured["sma_200"] - 1
 
-    daily_return = close.pct_change()
+    daily_return = close.pct_change(fill_method=None)
     featured["volatility_20d"] = daily_return.rolling(20).std()
     featured["volatility_60d"] = daily_return.rolling(60).std()
 
