@@ -28,6 +28,7 @@ Thumbs.db
 data/raw/*
 data/processed/*
 data/predictions/*
+data/runs/
 models/*
 
 !data/raw/.gitkeep

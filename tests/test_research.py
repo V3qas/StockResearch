@@ -64,6 +64,56 @@ def test_comparison_of_empty_dataset_has_zero_counts_and_undefined_metrics():
     assert comparison.classification_comparison.classification_samples.eq(0).all()
 
 
+@pytest.mark.parametrize("min_train_years", [2, 50])
+def test_cli_writes_comparable_artifacts_for_one_explicit_snapshot(monkeypatch, tmp_path, min_train_years):
+    from argparse import Namespace
+    import json
+    import main
+
+    monkeypatch.setattr(main, "RUNS_DIR", tmp_path / "runs")
+    calls = []
+    def fake_get_stock(ticker, start_date, end_date, force_download):
+        calls.append((ticker, end_date))
+        dates = pd.bdate_range("2010-01-01", "2017-12-31")
+        frame = pd.DataFrame({"Close": 100.0 + np.arange(len(dates)) * (1 + len(ticker))}, index=dates)
+        return frame
+    monkeypatch.setattr(main, "get_stock", fake_get_stock)
+    monkeypatch.setattr(main, "default_model_specs", lambda: [ModelSpec("xgboost", ConstantReturnModel, ConstantProbabilityModel)])
+    monkeypatch.setattr(main, "parse_args", lambda: Namespace(
+        tickers=["A", "BB", "CCC"], start_date="2010-01-01", end_date="2018-01-01",
+        force_download=False, samples=0, backtest=False, cross_sectional_backtest=False,
+        compare_models=True, min_train_years=min_train_years, min_train_samples=3,
+        max_price_age_days=7, min_ranking_tickers=3,
+    ))
+    output_dir = tmp_path / "predictions"
+    output_dir.mkdir()
+    old_output = output_dir / "cross_sectional_backtest_predictions.parquet"
+    pd.DataFrame({"stale": [1]}).to_parquet(old_output)
+    main.main()
+    assert {boundary for _, boundary in calls} == {"2018-01-01"}
+    pointer = json.loads((main.RUNS_DIR / "latest.json").read_text())
+    run_dir = main.RUNS_DIR / pointer["run_id"]
+    output_dir = run_dir / "predictions"
+    saved = pd.read_parquet(run_dir / "processed/all_samples.parquet")
+    assert saved.index.is_month_end.all()
+    assert saved.groupby(level=0).future_target_date.nunique().eq(1).all()
+    assert saved.future_target_date.max() > pd.Timestamp("2018-01-01")
+    assert saved.loc[saved.label_status == "pending", "alpha_12m"].isna().all()
+    manifest = json.loads((run_dir / "manifest.json").read_text())
+    assert manifest["status"] == "complete"
+    assert manifest["parameters"]["end_date_exclusive"] == "2018-01-01"
+    assert manifest["parameters"]["benchmark"] == "SPY"
+    assert manifest["parameters"]["reference_calendar"] == "XNYS"
+    assert pd.read_parquet(old_output).stale.eq(1).all()
+    assert pd.read_parquet(output_dir / old_output.name).empty == (min_train_years == 50)
+    assert (run_dir / "raw/benchmark.parquet").exists()
+    assert (run_dir / "processed/benchmark_coverage.csv").exists()
+    assert (output_dir / "classification_common_cohort.csv").exists()
+    assert "model" in pd.read_csv(output_dir / "model_comparison_by_year.csv").columns
+    for name in ["model_comparison_summary.csv", "model_comparison_by_year.csv", "ranking_metrics_by_date.parquet"]:
+        assert (output_dir / name).exists()
+
+
 @pytest.mark.parametrize("training_class", [0, 1, None])
 def test_single_class_baselines_keep_valid_probabilities(training_class):
     from src.backtest import run_cross_sectional_walk_forward_backtest

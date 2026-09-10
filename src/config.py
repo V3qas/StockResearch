@@ -10,6 +10,7 @@ RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 PREDICTIONS_DIR = DATA_DIR / "predictions"
 MODELS_DIR = PROJECT_ROOT / "models"
+RUNS_DIR = DATA_DIR / "runs"
 
 TICKERS = [
     "TSLA",
