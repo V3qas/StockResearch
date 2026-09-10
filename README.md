@@ -8,7 +8,8 @@ The first milestone is intentionally small:
 2. Cache raw prices as parquet files under `data/raw/`.
 3. Add basic momentum, moving-average, and volatility features.
 4. Build point-in-time 252-trading-day forward return and alpha targets.
-5. Save monthly ticker-level training samples under `data/processed/`.
+5. Save monthly ticker-level samples and one combined training dataset under
+   `data/processed/`.
 
 ## Setup
 
@@ -52,6 +53,9 @@ Each monthly sample includes:
 - `alpha_12m`
 - `future_outperform_12m`
 
+The per-ticker sample files are saved as `<ticker>_samples.parquet`. The combined
+dataset is saved as `data/processed/all_samples.parquet`.
+
 ## Test
 
 ```powershell
@@ -60,5 +64,5 @@ Each monthly sample includes:
 
 ## Next Milestone
 
-Build one combined multi-ticker training dataset and move toward a
-cross-sectional walk-forward backtest.
+Move from the current per-ticker walk-forward backtest to a cross-sectional
+walk-forward backtest over `data/processed/all_samples.parquet`.

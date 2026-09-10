@@ -9,6 +9,8 @@ BENCHMARK_RETURN_COLUMN = "benchmark_return_12m"
 ALPHA_TARGET_COLUMN = "alpha_12m"
 OUTPERFORM_TARGET_COLUMN = "future_outperform_12m"
 TARGET_DATE_COLUMN = "future_target_date"
+TICKER_COLUMN = "ticker"
+SAMPLE_INDEX_NAME = "as_of"
 
 TARGET_COLUMNS = [
     FUTURE_RETURN_COLUMN,
@@ -162,17 +164,19 @@ def build_monthly_samples(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
     if FUTURE_RETURN_COLUMN not in df.columns:
         raise ValueError("Run add_targets before build_monthly_samples.")
 
+    sampled = df.copy()
+    if TICKER_COLUMN in sampled.columns:
+        sampled = sampled.drop(columns=[TICKER_COLUMN])
+    sampled.insert(0, TICKER_COLUMN, ticker)
+    sampled.index.name = SAMPLE_INDEX_NAME
+
     required_columns = ["Close", FUTURE_RETURN_COLUMN]
     for optional_column in (BENCHMARK_RETURN_COLUMN, ALPHA_TARGET_COLUMN):
-        if optional_column in df.columns:
+        if optional_column in sampled.columns:
             required_columns.append(optional_column)
 
-    complete = df.dropna(subset=required_columns).copy()
+    complete = sampled.dropna(subset=required_columns).copy()
     if complete.empty:
         return complete
-
-    if "ticker" in complete.columns:
-        complete = complete.drop(columns=["ticker"])
-    complete.insert(0, "ticker", ticker)
 
     return complete.groupby(complete.index.to_period("M"), group_keys=False).tail(1)

@@ -9,13 +9,16 @@ from src.config import (
     BENCHMARK,
     FORECAST_DAYS,
     PREDICTIONS_DIR,
-    PROCESSED_DATA_DIR,
     START_DATE,
     TICKERS,
 )
+from src.datasets import (
+    build_ticker_samples,
+    combine_ticker_samples,
+    save_combined_samples,
+    save_ticker_samples,
+)
 from src.data_loader import get_stock, ticker_to_filename
-from src.features import add_features
-from src.targets import add_benchmark_targets, add_targets, build_monthly_samples
 
 
 def parse_args() -> argparse.Namespace:
@@ -122,7 +125,7 @@ def process_ticker(
     min_train_years: int,
     min_train_samples: int,
     benchmark_prices: pd.DataFrame,
-) -> None:
+) -> pd.DataFrame:
     print(f"\nLoading {ticker}...")
     prices = get_stock(
         ticker=ticker,
@@ -136,21 +139,20 @@ def process_ticker(
         f"({len(prices):,} rows)"
     )
 
-    with_features = add_features(prices)
-    with_targets = add_targets(with_features, forecast_days=forecast_days)
-    with_alpha = add_benchmark_targets(with_targets, benchmark_prices)
-    samples = build_monthly_samples(with_alpha, ticker=ticker)
-
-    PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = PROCESSED_DATA_DIR / f"{ticker_to_filename(ticker)}_samples.parquet"
-    samples.to_parquet(output_path)
+    samples = build_ticker_samples(
+        ticker=ticker,
+        prices=prices,
+        benchmark_prices=benchmark_prices,
+        forecast_days=forecast_days,
+    )
+    output_path = save_ticker_samples(samples, ticker=ticker)
 
     print(f"Generated historical samples: {len(samples):,}")
     print(f"Saved: {output_path}")
     print_sample_table(samples, limit=sample_count)
 
     if not run_backtest:
-        return
+        return samples
 
     backtest_predictions = run_walk_forward_backtest(
         samples,
@@ -159,7 +161,7 @@ def process_ticker(
     )
     if backtest_predictions.empty:
         print("\nNo backtest predictions generated.")
-        return
+        return samples
 
     PREDICTIONS_DIR.mkdir(parents=True, exist_ok=True)
     backtest_path = (
@@ -169,6 +171,7 @@ def process_ticker(
 
     print_backtest_summary(summarize_backtest(backtest_predictions))
     print(f"Backtest predictions saved: {backtest_path}")
+    return samples
 
 
 def main() -> None:
@@ -188,8 +191,9 @@ def main() -> None:
         f"({len(benchmark_prices):,} rows)"
     )
 
+    sample_frames = []
     for ticker in tickers:
-        process_ticker(
+        samples = process_ticker(
             ticker=ticker,
             start_date=args.start_date,
             forecast_days=args.forecast_days,
@@ -200,6 +204,16 @@ def main() -> None:
             min_train_samples=args.min_train_samples,
             benchmark_prices=benchmark_prices,
         )
+        sample_frames.append(samples)
+
+    combined_samples = combine_ticker_samples(sample_frames)
+    combined_path = save_combined_samples(combined_samples)
+    print(
+        "\nCombined dataset: "
+        f"{len(combined_samples):,} rows, "
+        f"{combined_samples['ticker'].nunique():,} tickers"
+    )
+    print(f"Saved: {combined_path}")
 
 
 if __name__ == "__main__":
