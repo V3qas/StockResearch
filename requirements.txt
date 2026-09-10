@@ -7,3 +7,4 @@ xgboost
 matplotlib
 pytest
 exchange-calendars==4.13.2
+streamlit>=1.50,<2

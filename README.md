@@ -28,6 +28,21 @@ Run the global model and all baselines on an explicit snapshot:
 .\.venv\Scripts\python.exe main.py --compare-models --end-date 2026-09-10
 ```
 
+Start the local dashboard after a successful run:
+
+```powershell
+.\.venv\Scripts\streamlit.exe run app.py
+```
+
+The dashboard opens in a browser and reads only the latest successful run from
+`data/runs/latest.json` on every rerun. It does not retrain models on page load.
+
+The dashboard contains an overview with key metrics and latest signals, a
+model comparison with annual charts, a selectable ticker analysis with price
+history, ranking-quality metrics and a data-quality/run-details view. Missing
+optional report artifacts are shown as unavailable instead of breaking the
+page.
+
 Other supported workflows:
 
 ```powershell
@@ -179,8 +194,8 @@ and `data/predictions/` files are legacy outputs and are no longer updated.
 An explicit date alone does not freeze provider revisions: retain the run's
 input snapshots for reproduction. Calendar upgrades or newly announced exchange
 closures can change future planned dates; the stored calendar and package
-version identify the convention used. Other dependency versions are recorded
-but are not yet pinned in `requirements.txt`.
+version identify the convention used. The manifest records the complete installed
+Python package set, but most versions are not yet pinned in `requirements.txt`.
 
 Unknown delisting outcomes are reported, not imputed. Metrics remain conditional
 on observed outcomes (and IC on complete dates). A fixed, manually selected
