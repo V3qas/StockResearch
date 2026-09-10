@@ -78,6 +78,9 @@ class ExperimentRun:
             for directory in (self.raw, self.processed, self.predictions):
                 directory.mkdir()
             source_files = [self.source_root / "main.py", self.source_root / "requirements.txt"]
+            replay_script = self.source_root / "replay_signal.py"
+            if replay_script.exists():
+                source_files.append(replay_script)
             source_files.extend(sorted((self.source_root / "src").rglob("*.py")))
             for source in source_files:
                 destination = self.path / "source" / source.relative_to(self.source_root)
