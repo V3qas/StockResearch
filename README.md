@@ -16,6 +16,57 @@ Use the project virtual environment:
 
 ## Run
 
+Run the **Does StockResearch find signal?** experiment with 300 US stocks:
+
+```powershell
+.\.venv\Scripts\python.exe main.py --universe-file universes/us_large_cap_300.json --compare-models --start-date 2012-01-01 --end-date 2026-09-10 --min-ranking-tickers 100 --samples 0
+```
+
+The frozen universe selects the largest 300 equity positions by holding market
+value from the official [iShares IVV holdings](https://www.ishares.com/us/products/239726/ishares-core-sp-500-etf/latest-holdings.csv)
+dated September 9, 2026, restricted to US location, USD and US exchanges. Share
+classes count separately. The JSON records the selection rule, original-source
+hash and limitations. This is an **exploratory current-survivor universe**, not
+point-in-time S&P 500 membership. Do not interpret a positive result as an
+unbiased historical signal. Positional tickers and `--universe-file` are mutually
+exclusive; the five-ticker default remains useful for quick checks.
+
+The report is saved to `data/runs/<run_id>/predictions/signal_report.md`, with
+`signal_diagnostics.png` for annual IC and decile curves. It includes mean and
+median Spearman rank IC, the share of defined IC months above zero, MAE, annual
+coverage, paired XGBoost/baseline IC differences, and realized forward excess
+returns for ten score buckets. The five-year default training window means that
+2012 price history produces test predictions starting in **2017**; recent
+predictions with unmatured outcomes remain pending, including all of 2026.
+
+Decile membership uses score ranks at each decision date, before outcomes are
+examined. Average-rank ties remain together; this can make buckets unequal or
+empty. A reported curve uses complete dates with all ten buckets populated and
+at least `max(10, min_ranking_tickers)` stocks. Missing outcomes suppress the
+entire date's decile returns; assignments and coverage remain available in
+`rank_decile_assignments.parquet` and `decile_returns_by_date.csv`. Per-ticker
+feature and label counts are saved in `universe_coverage.csv`. Dates receive
+equal weight in `decile_summary.csv`. The pooled historical mean is constant
+within each month, so it has no ranking IC or decile curve. Momentum has no MAE
+because its raw ranking score is not a calibrated alpha forecast.
+
+`price_jump_audit.csv` flags adjacent adjusted-close changes of at least +100%
+or at most -50%. No prices or stocks are automatically removed. Review flags
+before drawing conclusions. Monthly labels overlap: no significance, strategy
+profitability or independent-observation count is claimed.
+
+Re-fit from a run's verified input snapshots **without any downloads**:
+
+```powershell
+.\.venv\Scripts\python.exe replay_signal.py data/runs/<run_id>
+```
+
+Replay checks the saved raw/processed input hashes and writes a new isolated
+run with a reference to its parent. It uses the current source and environment;
+for exact numerical reproduction retain the recorded source and dependency
+versions as well. A changed model implementation is a new experiment. Original
+inputs and reports remain available in their own run directory.
+
 Build samples for the five default tickers:
 
 ```powershell
@@ -158,8 +209,10 @@ Every invocation writes a unique directory under `data/runs/<run_id>/`:
 - `raw/stock_<ticker>.parquet`, `raw/benchmark.parquet`: copies of the actual
   input frames, unaffected by later cache refreshes.
 - `raw/reference_calendar.parquet`: reference sessions, including future targets.
-- `processed/<ticker>_samples.parquet` and `processed/all_samples.parquet`:
+- `processed/stock_<ticker>_samples.parquet` and `processed/all_samples.parquet`:
   all feature-eligible rows, including unknown outcomes, sorted by date/ticker.
+  The stock prefix prevents the real `ALL` ticker from overwriting the combined
+  dataset on case-insensitive filesystems.
 - `processed/benchmark_coverage.csv`: available/missing expected benchmark closes.
 - `predictions/<ticker>_backtest_predictions.parquet`: optional per-ticker results.
 - `predictions/cross_sectional_backtest_predictions.parquet`: global XGBoost results.

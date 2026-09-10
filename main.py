@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from collections.abc import Sequence
 
 import pandas as pd
@@ -29,6 +30,8 @@ from src.calendars import benchmark_coverage, reference_sessions
 from src.experiments import ExperimentRun
 from src.features import FEATURE_COLUMNS
 from src.research import default_model_specs, run_model_comparison
+from src.signal_report import price_jump_audit, write_signal_report
+from src.universe import load_universe
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,6 +44,7 @@ def parse_args() -> argparse.Namespace:
         help="Ticker symbols to process, e.g. TSLA BABA RHM.DE.",
     )
     parser.add_argument("--start-date", default=START_DATE)
+    parser.add_argument("--universe-file", help="Frozen JSON universe containing tickers and selection metadata.")
     parser.add_argument("--end-date", help="Exclusive snapshot date, YYYY-MM-DD; defaults to today in UTC.")
     parser.add_argument("--max-price-age-days", type=int, default=MAX_PRICE_AGE_DAYS)
     parser.add_argument(
@@ -69,6 +73,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-train-years", type=int, default=5)
     parser.add_argument("--min-train-samples", type=int, default=24)
     args = parser.parse_args()
+    if args.universe_file and args.tickers:
+        parser.error("Use either positional tickers or --universe-file.")
     try:
         args.end_date = effective_end_date(args.end_date)
         if pd.Timestamp(args.start_date) >= pd.Timestamp(args.end_date):
@@ -230,7 +236,8 @@ def process_ticker(
 
 def main() -> None:
     args = parse_args()
-    tickers = validate_tickers(args.tickers or TICKERS)
+    universe = load_universe(args.universe_file) if getattr(args, "universe_file", None) else {}
+    tickers = validate_tickers(universe.get("tickers") or args.tickers or TICKERS)
     comparison_requested = bool(args.cross_sectional_backtest or args.compare_models)
     specs = default_model_specs() if comparison_requested else []
     if specs and not args.compare_models:
@@ -239,6 +246,7 @@ def main() -> None:
         "start_date": args.start_date,
         "end_date_exclusive": args.end_date,
         "tickers": tickers,
+        "universe": universe,
         "benchmark": BENCHMARK,
         "reference_calendar": REFERENCE_CALENDAR,
         "forecast_days": FORECAST_DAYS,
@@ -258,6 +266,8 @@ def main() -> None:
     snapshot_date = pd.Timestamp(args.end_date) - pd.Timedelta(days=1)
     with ExperimentRun(RUNS_DIR, metadata) as run:
         print(f"Run: {run.run_id}")
+        if universe:
+            (run.raw / "universe.json").write_text(json.dumps(universe, indent=2) + "\n", encoding="utf-8")
         sessions = reference_sessions(pd.Timestamp(args.start_date), snapshot_date, FORECAST_DAYS)
         pd.DataFrame(index=sessions.rename("session")).to_parquet(run.raw / "reference_calendar.parquet")
         print(f"Loading benchmark {BENCHMARK}...")
@@ -309,6 +319,12 @@ def main() -> None:
             comparison.yearly_summary.to_csv(run.predictions / "model_comparison_by_year.csv")
             comparison.ranking_by_date.to_parquet(run.predictions / "ranking_metrics_by_date.parquet")
             comparison.classification_comparison.to_csv(run.predictions / "classification_common_cohort.csv")
+            jumps = [price_jump_audit(benchmark_prices, BENCHMARK)]
+            for ticker in tickers:
+                prices = pd.read_parquet(run.raw / f"stock_{ticker_to_filename(ticker)}.parquet")
+                jumps.append(price_jump_audit(prices, ticker))
+            report = write_signal_report(comparison, combined_samples, metadata, run.predictions, price_jumps=pd.concat(jumps))
+            print(f"\nSignal report: {report}")
             if predictions.empty:
                 print("\nNo cross-sectional predictions generated; saved empty results.")
             columns = ["eligible_samples", "observed_labels", "samples", "mae", "ic_dates", "mean_rank_ic"]

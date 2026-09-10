@@ -70,6 +70,9 @@ def test_models_share_folds_and_baselines_use_training_history_only():
     assert momentum.ranking_score.notna().all()
     assert pd.isna(comparison.summary.loc["momentum", "mae"])
     assert comparison.summary.loc["momentum", "mean_rank_ic"] == pytest.approx(1.0)
+    assert comparison.summary.loc["momentum", "median_rank_ic"] == pytest.approx(1.0)
+    assert comparison.summary.loc["momentum", "positive_rank_ic_fraction"] == 1.0
+    assert pd.isna(comparison.summary.loc["zero", "positive_rank_ic_fraction"])
     assert comparison.summary.loc["zero", "ic_dates"] == 0
     assert comparison.summary.loc["zero", "brier_score"] == pytest.approx(0.25)
     assert set(comparison.yearly_summary.index.get_level_values("test_year")) == {2019, 2020, 2021, 2022}
@@ -131,6 +134,10 @@ def test_cli_writes_comparable_artifacts_for_one_explicit_snapshot(monkeypatch, 
     assert (run_dir / "raw/benchmark.parquet").exists()
     assert (run_dir / "processed/benchmark_coverage.csv").exists()
     assert (output_dir / "classification_common_cohort.csv").exists()
+    report = (output_dir / "signal_report.md").read_text(encoding="utf-8")
+    assert "Does StockResearch find signal?" in report
+    assert "No complete, populated decile dates" in report
+    assert "predictions/signal_report.md" in manifest["artifacts_sha256"]
     assert "model" in pd.read_csv(output_dir / "model_comparison_by_year.csv").columns
     for name in ["model_comparison_summary.csv", "model_comparison_by_year.csv", "ranking_metrics_by_date.parquet"]:
         assert (output_dir / name).exists()

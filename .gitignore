@@ -29,6 +29,7 @@ data/raw/*
 data/processed/*
 data/predictions/*
 data/runs/
+data/universe_sources/
 models/*
 
 !data/raw/.gitkeep

@@ -63,6 +63,9 @@ def _summary(predictions: pd.DataFrame, ranking: pd.DataFrame) -> pd.Series:
     result["mean_tickers_per_date"] = ranking.n_tickers.mean()
     result["mean_ic"] = ranking.ic.mean()
     result["mean_rank_ic"] = ranking.rank_ic.mean()
+    valid_ic = ranking.rank_ic.dropna()
+    result["median_rank_ic"] = valid_ic.median()
+    result["positive_rank_ic_fraction"] = (valid_ic > 0).mean() if len(valid_ic) else np.nan
     return result
 
 
