@@ -6,3 +6,4 @@ scikit-learn
 xgboost
 matplotlib
 pytest
+exchange-calendars==4.13.2

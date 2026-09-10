@@ -4,10 +4,16 @@ import pandas as pd
 import pytest
 
 from src.targets import add_benchmark_targets, add_targets, build_monthly_samples
+from src.calendars import reference_sessions
+
+
+def nyse_dates():
+    sessions = reference_sessions(pd.Timestamp("2020-01-02"), pd.Timestamp("2021-12-31"))
+    return sessions[sessions >= "2020-01-02"][:260]
 
 
 def test_add_targets_uses_exact_forecast_day_shift() -> None:
-    dates = pd.bdate_range("2020-01-01", periods=260)
+    dates = nyse_dates()
     df = pd.DataFrame({"Close": range(100, 360)}, index=dates)
 
     result = add_targets(df, forecast_days=252)
@@ -33,12 +39,12 @@ def test_build_monthly_samples_keeps_last_trading_day_per_month() -> None:
 
 
 def test_add_benchmark_targets_creates_12m_alpha() -> None:
-    dates = pd.bdate_range("2020-01-01", periods=260)
+    dates = nyse_dates()
     df = pd.DataFrame({"Close": range(100, 360)}, index=dates)
     targeted = add_targets(df, forecast_days=252)
     benchmark = pd.DataFrame(
         {"Close": [1_000.0, 1_100.0]},
-        index=pd.to_datetime(["2020-01-01", dates[252]]),
+        index=pd.to_datetime([dates[0], dates[252]]),
     )
 
     result = add_benchmark_targets(targeted, benchmark)

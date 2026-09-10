@@ -5,15 +5,17 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.config import PROCESSED_DATA_DIR
+from src.config import MAX_PRICE_AGE_DAYS, PROCESSED_DATA_DIR
+from src.calendars import reference_sessions
 from src.data_loader import ticker_to_filename
-from src.features import add_features
+from src.features import FEATURE_COLUMNS, add_features
 from src.targets import (
     ALPHA_TARGET_COLUMN,
     FUTURE_RETURN_COLUMN,
     OUTPERFORM_TARGET_COLUMN,
     SAMPLE_INDEX_NAME,
     TICKER_COLUMN,
+    TARGET_DATE_COLUMN,
     add_benchmark_targets,
     add_targets,
     build_monthly_samples,
@@ -42,16 +44,47 @@ def build_ticker_samples(
     prices: pd.DataFrame,
     benchmark_prices: pd.DataFrame,
     forecast_days: int,
+    *,
+    snapshot_date: str | pd.Timestamp | None = None,
+    max_price_age_days: int = MAX_PRICE_AGE_DAYS,
+    reference_dates: pd.DatetimeIndex | None = None,
 ) -> pd.DataFrame:
-    with_features = add_features(prices)
-    with_targets = add_targets(with_features, forecast_days=forecast_days)
-    with_alpha = add_benchmark_targets(with_targets, benchmark_prices)
-    return build_monthly_samples(with_alpha, ticker=ticker)
+    cutoff = pd.Timestamp(snapshot_date) if snapshot_date is not None else prices.index.max()
+    benchmark = benchmark_prices.loc[benchmark_prices.index <= cutoff]
+    prices = prices.loc[prices.index <= cutoff]
+    dates = (
+        pd.date_range(prices.index.min(), cutoff, freq="ME")
+        if not prices.empty else pd.DatetimeIndex([])
+    )
+    if reference_dates is None:
+        reference_dates = (
+            reference_sessions(prices.index.min(), cutoff, forecast_days)
+            if not prices.empty else pd.DatetimeIndex([])
+        )
+    samples = build_monthly_samples(
+        add_features(prices), ticker, as_of_dates=dates,
+        max_price_age_days=max_price_age_days,
+    )
+    with_targets = add_targets(
+        samples, forecast_days, prices=prices, reference_dates=reference_dates,
+        max_price_age_days=max_price_age_days, observation_end=cutoff,
+    )
+    with_alpha = add_benchmark_targets(
+        with_targets, benchmark, max_price_age_days,
+        reference_dates=reference_dates, observation_end=cutoff,
+    )
+    with_alpha["label_status"] = "missing"
+    with_alpha.loc[with_alpha[TARGET_DATE_COLUMN] > cutoff, "label_status"] = "pending"
+    with_alpha.loc[with_alpha[ALPHA_TARGET_COLUMN].notna(), "label_status"] = "observed"
+    with_alpha["snapshot_date"] = cutoff
+    # Eligibility depends only on the information available at as_of.
+    return with_alpha.dropna(subset=[*FEATURE_COLUMNS, "Close", "price_date"])
 
 
-def save_ticker_samples(samples: pd.DataFrame, ticker: str) -> Path:
-    PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = ticker_samples_path(ticker)
+def save_ticker_samples(samples: pd.DataFrame, ticker: str, output_dir: Path | None = None) -> Path:
+    directory = PROCESSED_DATA_DIR if output_dir is None else output_dir
+    directory.mkdir(parents=True, exist_ok=True)
+    output_path = directory / f"{ticker_to_filename(ticker)}_samples.parquet"
     samples.to_parquet(output_path)
     return output_path
 
@@ -71,7 +104,10 @@ def combine_ticker_samples(sample_frames: Iterable[pd.DataFrame]) -> pd.DataFram
 
     if not frames:
         index = pd.DatetimeIndex([], name=SAMPLE_INDEX_NAME)
-        return pd.DataFrame(columns=REQUIRED_COMBINED_COLUMNS, index=index)
+        return pd.DataFrame(
+            columns=[*REQUIRED_COMBINED_COLUMNS, *FEATURE_COLUMNS, TARGET_DATE_COLUMN],
+            index=index,
+        )
 
     combined = pd.concat(frames, axis=0)
     combined = combined.reset_index().sort_values(
@@ -86,9 +122,10 @@ def combine_ticker_samples(sample_frames: Iterable[pd.DataFrame]) -> pd.DataFram
     return combined
 
 
-def save_combined_samples(samples: pd.DataFrame) -> Path:
-    PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = all_samples_path()
+def save_combined_samples(samples: pd.DataFrame, output_dir: Path | None = None) -> Path:
+    directory = PROCESSED_DATA_DIR if output_dir is None else output_dir
+    directory.mkdir(parents=True, exist_ok=True)
+    output_path = directory / ALL_SAMPLES_FILENAME
     samples.to_parquet(output_path)
     return output_path
 

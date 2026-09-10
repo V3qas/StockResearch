@@ -24,9 +24,48 @@ def directional_accuracy(y_true: pd.Series, y_pred: pd.Series) -> float:
 
 def correlation(y_true: pd.Series, y_pred: pd.Series) -> float:
     values = _paired_values(y_true, y_pred)
-    if len(values) < 2:
+    if len(values) < 2 or values.iloc[:, 0].nunique() < 2 or values.iloc[:, 1].nunique() < 2:
         return float("nan")
     return float(values.iloc[:, 0].corr(values.iloc[:, 1]))
+
+
+def ranking_metrics_by_date(
+    predictions: pd.DataFrame,
+    target_column: str = "alpha_12m",
+    prediction_column: str = "predicted_alpha_12m",
+    min_tickers: int = 3,
+) -> pd.DataFrame:
+    """Cross-sectional IC and Spearman IC, with one equal-weight observation per date.
+
+    Constant predictions (e.g. zero alpha) have undefined IC, not an arbitrary
+    ticker-order ranking. Partial outcomes are reported as incomplete, without
+    computing an IC on a subset selected by future quote availability.
+    """
+    if not isinstance(predictions.index, pd.DatetimeIndex):
+        raise ValueError("Expected a DatetimeIndex.")
+    if min_tickers < 2:
+        raise ValueError("min_tickers must be at least 2.")
+    if predictions.reset_index(drop=True).assign(as_of=predictions.index).duplicated(["as_of", "ticker"]).any():
+        raise ValueError("Duplicate as_of/ticker predictions.")
+    rows = []
+    for as_of, group in predictions.groupby(level=0, sort=True):
+        valid = group.dropna(subset=["ticker", target_column, prediction_column])
+        count = group.ticker.nunique()
+        evaluated_count = valid.ticker.nunique()
+        complete = evaluated_count == count and count >= min_tickers
+        actual, predicted = valid[target_column], valid[prediction_column]
+        rows.append({
+            "as_of": as_of,
+            "n_tickers": count,
+            "n_evaluated_tickers": evaluated_count,
+            "n_missing_targets": int(group[target_column].isna().sum()),
+            "label_coverage": float(group[target_column].notna().mean()),
+            "ic": correlation(actual, predicted) if complete else np.nan,
+            "rank_ic": correlation(actual.rank(), predicted.rank()) if complete else np.nan,
+        })
+    if not rows:
+        return pd.DataFrame(columns=["n_tickers", "n_evaluated_tickers", "n_missing_targets", "label_coverage", "ic", "rank_ic"], index=pd.DatetimeIndex([], name="as_of"))
+    return pd.DataFrame(rows).set_index("as_of")
 
 
 def r2_score(y_true: pd.Series, y_pred: pd.Series) -> float:

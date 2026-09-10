@@ -19,6 +19,9 @@ TICKERS = [
     "RHM.DE",
 ]
 
-BENCHMARK = "^GSPC"
+# Adjusted ETF prices include distributions, unlike the S&P 500 price index.
+BENCHMARK = "SPY"
 START_DATE = "2010-01-01"
 FORECAST_DAYS = 252
+MAX_PRICE_AGE_DAYS = 7
+REFERENCE_CALENDAR = "XNYS"
